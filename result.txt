@@ -1,0 +1,7 @@
+MSE results for the 3 methods:
+
+Collaborative Filtering: 
+
+SVD (): 1.4557
+
+AutoRec
