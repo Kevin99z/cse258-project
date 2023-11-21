@@ -1,6 +1,6 @@
 MSE results for the 3 methods:
 
-Collaborative Filtering: 
+Collaborative Filtering: 1.7178062574030326
 
 SVD (): 1.4557
 
