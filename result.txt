@@ -1,7 +1,7 @@
 MSE results for the 3 methods:
 
-Collaborative Filtering: 1.7178062574030326
+Collaborative Filtering: 1.7235
 
-SVD (): 1.4557
+Latent Factor: 1.4534
 
-AutoRec
+AutoRec: 0.8933

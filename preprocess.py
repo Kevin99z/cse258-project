@@ -11,7 +11,7 @@ data['recipe_id'] = data['recipe_id'].astype('category').cat.codes
 data.columns = ['user', 'item', 'rating']
 # randomly split the data into train, valid and test
 train = data.sample(frac=0.8, random_state=200)
-valid = data.drop(train.index).sample(frac=0.1, random_state=200)
+valid = data.drop(train.index).sample(frac=0.5, random_state=200)
 test = data.drop(train.index).drop(valid.index)
 # save the data
 train.to_csv('train.csv', index=False)
