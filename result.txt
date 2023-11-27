@@ -1,7 +1,12 @@
 MSE results for the 3 methods:
 
-Collaborative Filtering: 1.7235
+Predict Mean: 1.5946
+
+CF (User-based): 1.7358
+CF (item-based): 1.6544
+CF (User-based, Cosine Similarity): 1.6989
+CF (Item-based, Cosine Similarity): 1.6365
 
 Latent Factor: 1.4534
 
-AutoRec: 0.8933
+AutoRec: 1.2970

@@ -111,20 +111,20 @@ class AutoRec(LightningModule):
         input_R, input_mask_R = input_R.to_dense(), input_mask_R.to_dense()
         output_R = self.forward(input_R, input_mask_R)
         # MSE loss
-        rec_cost = self.criterion(output_R, input_R)
+        rec_cost = self.criterion(output_R, input_R) / input_mask_R.sum()
         pre_reg_cost = torch.norm(self.W)**2 + torch.norm(self.V)**2
         reg_cost = self.lambda_value * 0.5 * pre_reg_cost
         cost = rec_cost + reg_cost
-        self.log('train_loss', rec_cost / input_mask_R.sum(), batch_size=input_mask_R.sum(), prog_bar=True)
+        self.log('train_loss', rec_cost, batch_size=input_mask_R.sum(), prog_bar=True)
         return cost
 
     def validation_step(self, batch, batch_idx):
         input_R, input_mask_R = batch
         input_R, input_mask_R = input_R.to_dense(), input_mask_R.to_dense()
         output_R = self.forward(input_R, input_mask_R)
-        rec_cost = self.criterion(output_R, input_R) 
+        rec_cost = self.criterion(output_R, input_R) / input_mask_R.sum()
         cost = rec_cost
-        self.log('val_loss', cost/ input_mask_R.sum(), batch_size=input_mask_R.sum())
+        self.log('val_loss', cost, batch_size=input_mask_R.sum())
         return cost
     
     def test_step(self, batch, batch_idx):
@@ -132,7 +132,7 @@ class AutoRec(LightningModule):
         input_R, input_mask_R = input_R.to_dense(), input_mask_R.to_dense()
         output_R = self.forward(input_R, input_mask_R)
         # collect all the errors in a list
-        error_R = torch.abs(output_R - input_R)
+        error_R = torch.abs(output_R)
         errors = error_R[input_mask_R == 1]
         self.errors.extend(errors.cpu().tolist())
         loss = self.criterion(output_R, input_R)
@@ -226,75 +226,40 @@ def parse_args():
     parser.add_argument('--f')
     args = parser.parse_args()
     return args
+args = parse_args()
+
+
 # %%
-if __name__ == '__main__':
-    args = parse_args()
-    # Initialize data module
-    data_module = AutoRecDataModule(
-        train_file='train.csv',
-        valid_file='valid.csv',
-        test_file='test.csv',
-        batch_size=args.batch_size
-    )
-
-    # Setup data (e.g., create rating and mask matrices)
-    data_module.setup()
-
-    # Initialize the AutoRec model
-    if args.checkpoint is None:
-        model = AutoRec(
-            args=args,
-            num_users=data_module.num_users,
-            num_items=data_module.num_items,
-            user_train_set=data_module.user_train_set,
-            item_train_set=data_module.item_train_set,
-            item_test_set=data_module.item_test_set,
-        )
-    else:
-        model = AutoRec.load_from_checkpoint(args.checkpoint,
-                                             args=args,
-            num_users=data_module.num_users,
-            num_items=data_module.num_items,
-            user_train_set=data_module.user_train_set,
-            item_train_set=data_module.item_train_set,
-            item_test_set=data_module.item_test_set,
-                                         ).cuda()
-    early_stop_callback = EarlyStopping(
-        monitor='val_loss',     # Metric to monitor
-        min_delta=0.00,         # Minimum change in the monitored quantity to qualify as an improvement
-        patience=5,             # Number of epochs with no improvement after which training will be stopped
-        verbose=False,          # Whether to print logs to stdout
-        mode='min',             # In 'min' mode, training will stop when the quantity monitored has stopped decreasing
-        )
-    from pytorch_lightning.callbacks import ModelCheckpoint
-
-    checkpoint_callback = ModelCheckpoint(
-        dirpath='ckpt/',
-        filename='{epoch}-{step}',
-        every_n_epochs=1,
-        monitor='val_loss',
-        save_top_k=1,
-    )
-
-    # Initialize the PyTorch Lightning trainer
-    trainer = Trainer(
-        max_epochs=args.train_epoch,
-        devices=[0],
-        callbacks=[early_stop_callback, checkpoint_callback],
-        gradient_clip_val=1.0,
-    )
-
-    # Train the model
-    trainer.fit(model, datamodule=data_module)
-    
-    model = model.cuda()
-    # Evaluate the model on the test set
-    with torch.no_grad():
-        total_loss, cnt = 0, 0
-        for i, data in enumerate(data_module.test_dataloader()):
-            loss, size = model.test_step(data, i)
-            total_loss += float(loss)
-            cnt += int(size)
-        test_res = total_loss / cnt
-    trainer.save_checkpoint(f'ckpt/lr={args.base_lr}-lambda={args.lambda_value}-epoch={trainer.current_epoch}.ckpt')
-    print(test_res)
+data_module = AutoRecDataModule(
+    train_file='train.csv',
+    valid_file='valid.csv',
+    test_file='test.csv',
+    batch_size=args.batch_size
+)
+device = 'cuda:1'
+data_module.setup()
+model = AutoRec.load_from_checkpoint("ckpt/lr=0.001-lambda=0.001-epoch=47.ckpt",
+                                     args=args,
+                    num_users=data_module.num_users,
+                    num_items=data_module.num_items,
+                    user_train_set=data_module.user_train_set,
+                    item_train_set=data_module.item_train_set,
+                    item_test_set=data_module.item_test_set,
+        ).to(device)
+                                     
+# %%
+# Evaluate the model on the test set
+with torch.no_grad():
+    total_loss, cnt = 0, 0
+    for i, data in enumerate(data_module.test_dataloader()):
+        data = [d.to(device) for d in data]
+        loss, size = model.test_step(data, i)
+        total_loss += float(loss)
+        cnt += int(size)
+    test_res = total_loss / cnt
+print(test_res)
+# %%
+import matplotlib.pyplot as plt
+errors = model.errors
+plt.hist(errors, bins=25, range=(0, 5))
+# %%
